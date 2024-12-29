@@ -16,12 +16,12 @@ dt = 4e-2 / n
 substeps = int(1 / 60 // dt)
 
 # 重力
-gravity = ti.Vector([0, -9.8, 0])
+GRAVITY = [0, -9.8, 0]
 # ばね定数。小さくすることで柔らかく反発が強くなる
 spring_Y = 3e4
 # 質点に影響する他の質点の影響で減速する係数。
 dashpot_damping = 1e4
-# バネの抵抗による速度減衰
+# バネの抵抗による速度減衰。ボールとの接触時のみ発生させているので接触抵抗
 drag_damping = 1
 
 # ボールの半径
@@ -97,10 +97,11 @@ else:
 
 # シミュレーションのサブステップ
 @ti.kernel
-def substep():
+def substep(g_x: float, g_y: float, g_z: float, spring_y: float, dp_damping: float, drag_damping:float):
+    g = ti.Vector([g_x, g_y, g_z])
     # 重力を適用
     for i in ti.grouped(x):
-        v[i] += gravity * dt
+        v[i] += g * dt
 
 
     for i in ti.grouped(x):
@@ -116,16 +117,14 @@ def substep():
                 current_dist = x_ij.norm()
                 original_dist = quad_size * float(i - j).norm()
                 # Spring force
-                force += -spring_Y * d * (current_dist / original_dist - 1)
+                force += -spring_y * d * (current_dist / original_dist - 1)
                 # Dashpot damping
-                force += -v_ij.dot(d) * d * dashpot_damping * quad_size
+                force += -v_ij.dot(d) * d * dp_damping * quad_size
         # 力を速度に変換
         v[i] += force * dt
 
     # 移動抵抗とボールとの衝突処理
     for i in ti.grouped(x):
-        # 移動抵抗分減速
-        v[i] *= ti.exp(-drag_damping * dt)
         # ボールとの衝突処理。座標内に入ったら中心に向かうベクトル成分だけを0にする
         offset_to_center = x[i] - ball_center[0]
         if offset_to_center.norm() <= ball_radius:
@@ -133,6 +132,8 @@ def substep():
             normal = offset_to_center.normalized()
             # 接触抵抗を考えるなら、ここで速度に関する減速の大きさをベクトルとの法線成分から計算するのがいいかも?
             v[i] -= min(v[i].dot(normal), 0) * normal
+            # 移動抵抗分減速
+            v[i] *= ti.exp(-drag_damping * dt)
         # 位置を更新
         x[i] += dt * v[i]
 
@@ -144,29 +145,84 @@ def update_vertices():
 
 window = ti.ui.Window("Taichi Cloth Simulation on GGUI", (1024, 1024),
                       vsync=True)
+gui = window.get_gui()
+
 canvas = window.get_canvas()
 canvas.set_background_color((1, 1, 1))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
+with gui.sub_window("Sub Window", x=10, y=10, width=300, height=100):
+    gui.text("text")
+    is_clicked = gui.button("name")
+
+
+# 実行時変数定義
 current_t = 0.0
+max_t = 1.5
+paused=False
+
+# 質点の初期化
 initialize_mass_points()
 
 # サブステップ数の表示
 print("Substeps: ", substeps)
 
+
+def init():
+    global current_t
+    
+    initialize_mass_points()
+    initialize_mesh_indices()
+
+# オプション表示
+def show_options():
+    global max_t
+    global spring_Y
+    global dashpot_damping
+    global drag_damping
+    global paused
+
+    with gui.sub_window("Gravity", 0.05, 0.2, 0.2, 0.1) as w:
+        GRAVITY[0] = w.slider_float("x", GRAVITY[0], -10, 10)
+        GRAVITY[1] = w.slider_float("y", GRAVITY[1], -10, 10)
+        GRAVITY[2] = w.slider_float("z", GRAVITY[2], -10, 10)
+
+    with gui.sub_window("Cloth", 0.05, 0.3, 0.2, 0.1) as w:
+        spring_Y = w.slider_float("spring", spring_Y, 1e2, 26e3)
+        dashpot_damping = w.slider_float("dashpot", dashpot_damping, 1e2, 32e3)
+        drag_damping = w.slider_float("drag", drag_damping, 0.8, 100)
+
+    with gui.sub_window("Options", 0.05, 0.45, 0.2, 0.4) as w:
+        max_t = w.slider_float("max t", max_t, 0.5, 5.0)
+        if w.button("restart"):
+            init()
+        if paused:
+            if w.button("Continue"):
+                paused = False
+        else:
+            if w.button("Pause"):
+                paused = True
+        if w.button("Reset"):
+            max_t = 1.5
+            spring_Y = 3e4
+            dashpot_damping = 1e4
+            drag_damping = 1
+
+
 # 実行ループ
 while window.running:
     # 時間経過で位置をリセット
-    if current_t > 1.5:
+    if current_t > max_t:
         # Reset
         initialize_mass_points()
         current_t = 0
 
     # substep分割数分計算を進める
-    for i in range(substeps):
-        substep()
-        current_t += dt
+    if not paused:
+        for i in range(substeps):
+            substep(*GRAVITY, spring_Y, dashpot_damping, drag_damping)
+            current_t += dt
     # レンダリング用の頂点情報を更新
     update_vertices()
 
@@ -186,4 +242,5 @@ while window.running:
     # 衝突処理用のボールを描画
     scene.particles(ball_center, radius=ball_radius * 0.95, color=(0.5, 0.42, 0.8))
     canvas.scene(scene)
+    show_options()
     window.show()
