@@ -1,4 +1,5 @@
 import taichi as ti
+
 ti.init(arch=ti.vulkan)  # Alternatively, ti.init(arch=ti.cpu)
 
 
@@ -27,7 +28,7 @@ drag_damping = 1
 # ボールの半径
 ball_radius = 0.3
 # ボールの中心
-ball_center = ti.Vector.field(3, dtype=float, shape=(1, ))
+ball_center = ti.Vector.field(3, dtype=float, shape=(1,))
 ball_center[0] = [0, 0, 0]
 
 # 位置と速度の保持
@@ -53,8 +54,9 @@ def initialize_mass_points():
 
     for i, j in x:
         x[i, j] = [
-            i * quad_size - 0.5 + random_offset[0], 0.6,
-            j * quad_size - 0.5 + random_offset[1]
+            i * quad_size - 0.5 + random_offset[0],
+            0.6,
+            j * quad_size - 0.5 + random_offset[1],
         ]
         v[i, j] = [0, 0, 0]
 
@@ -79,6 +81,7 @@ def initialize_mesh_indices():
         else:
             colors[i * n + j] = (1, 0.334, 0.52)
 
+
 initialize_mesh_indices()
 
 # 影響するバネのインデックスを作成
@@ -95,14 +98,21 @@ else:
             if (i, j) != (0, 0) and abs(i) + abs(j) <= 2:
                 spring_offsets.append(ti.Vector([i, j]))
 
+
 # シミュレーションのサブステップ
 @ti.kernel
-def substep(g_x: float, g_y: float, g_z: float, spring_y: float, dp_damping: float, drag_damping:float):
+def substep(
+    g_x: float,
+    g_y: float,
+    g_z: float,
+    spring_y: float,
+    dp_damping: float,
+    drag_damping: float,
+):
     g = ti.Vector([g_x, g_y, g_z])
     # 重力を適用
     for i in ti.grouped(x):
         v[i] += g * dt
-
 
     for i in ti.grouped(x):
         # 力の大きさを保持
@@ -137,14 +147,15 @@ def substep(g_x: float, g_y: float, g_z: float, spring_y: float, dp_damping: flo
         # 位置を更新
         x[i] += dt * v[i]
 
+
 # レンダリング用の頂点情報を更新
 @ti.kernel
 def update_vertices():
     for i, j in ti.ndrange(n, n):
         vertices[i * n + j] = x[i, j]
 
-window = ti.ui.Window("Taichi Cloth Simulation on GGUI", (1024, 1024),
-                      vsync=True)
+
+window = ti.ui.Window("Taichi Cloth Simulation on GGUI", (1024, 1024), vsync=True)
 gui = window.get_gui()
 
 canvas = window.get_canvas()
@@ -160,7 +171,7 @@ with gui.sub_window("Sub Window", x=10, y=10, width=300, height=100):
 # 実行時変数定義
 current_t = 0.0
 max_t = 1.5
-paused=False
+paused = False
 
 # 質点の初期化
 initialize_mass_points()
@@ -171,9 +182,10 @@ print("Substeps: ", substeps)
 
 def init():
     global current_t
-    
+
     initialize_mass_points()
     initialize_mesh_indices()
+
 
 # オプション表示
 def show_options():
@@ -233,10 +245,7 @@ while window.running:
 
     scene.point_light(pos=(0, 1, 2), color=(1, 1, 1))
     scene.ambient_light((0.5, 0.5, 0.5))
-    scene.mesh(vertices,
-               indices=indices,
-               per_vertex_color=colors,
-               two_sided=True)
+    scene.mesh(vertices, indices=indices, per_vertex_color=colors, two_sided=True)
 
     # Draw a smaller ball to avoid visual penetration
     # 衝突処理用のボールを描画
