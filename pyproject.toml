@@ -7,3 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "taichi>=1.7.3",
 ]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.9.4",
+]
