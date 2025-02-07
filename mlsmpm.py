@@ -71,9 +71,23 @@ class Particle:
                     0.6,
                     j * quad_size - half_width + random_offset[1],
                 ]
+                # 速度は適当な値を入れる
+                self.vel[i * n + j] = [0.01, 0.02, -0.05]
 
 
 def main():
+    @ti.kernel
+    def substep(pos: ti.template(), vel: ti.template(), dt: float):
+        """
+        シミュレーションのステップ
+        @param p: パーティクル
+        @param dt: シミュレーションの時間刻み
+        """
+
+        # 速度を反映
+        for i in ti.grouped(pos):
+            pos[i] += vel[i] * dt
+
     window = ti.ui.Window("Taichi Particle view", (1024, 1024), vsync=True)
 
     canvas = window.get_canvas()
@@ -93,6 +107,9 @@ def main():
     # c_vel = ti.Vector.field(3, dtype=ti.f32, shape=())
     # c_mass = ti.field(dtype=ti.f32, shape=())
 
+    current_t = 0.0
+    dt = 0.01
+
     while window.running:
         # キーボードによる移動に対応
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
@@ -100,6 +117,9 @@ def main():
 
         scene.ambient_light((0.8, 0.8, 0.8))
         scene.point_light(pos=(0.5, 1.5, 1.5), color=(1, 1, 1))
+
+        substep(p.pos, p.vel, dt)
+        current_t += dt
 
         scene.particles(p.pos, color=(0.68, 0.26, 0.19), radius=0.02)
         canvas.scene(scene)
