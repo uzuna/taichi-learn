@@ -28,9 +28,26 @@ class StaticBall:
         scene.particles(self.center, radius=self.radius, color=self.color)
 
 
-def main():
+@ti.data_oriented
+class Particle:
+    """
+    パーティクルのクラス
+    データを保持し、ti.kernelのメソッドを使うためにはti.data_orientedデコレーとが必要
+    """
+
+    pos: ti.Vector
+    vel: ti.Vector
+    mass: float
+    n: int
+
+    def __init__(self, n: int):
+        self.pos = ti.Vector.field(3, dtype=ti.f32, shape=pow(n, 2))
+        self.vel = ti.Vector.field(3, dtype=ti.f32, shape=pow(n, 2))
+        self.mass = ti.field(dtype=ti.f32, shape=pow(n, 2))
+        self.n = n
+
     @ti.kernel
-    def init_points_pos(points: ti.template(), width: ti.f32, n: ti.i32):
+    def init_points_pos(self, width: ti.f32, n: ti.i32):
         """
         配列の初期化
         @param points: 配列
@@ -49,12 +66,14 @@ def main():
 
         for i in range(n):
             for j in range(n):
-                points[i * n + j] = [
+                self.pos[i * n + j] = [
                     i * quad_size - half_width + random_offset[0],
                     0.6,
                     j * quad_size - half_width + random_offset[1],
                 ]
 
+
+def main():
     window = ti.ui.Window("Taichi Particle view", (1024, 1024), vsync=True)
 
     canvas = window.get_canvas()
@@ -68,8 +87,11 @@ def main():
 
     # パーティクル作成
     N = 16
-    particles_pos = ti.Vector.field(3, dtype=ti.f32, shape=pow(N, 2))
-    init_points_pos(particles_pos, 1.0, N)
+    p = Particle(N)
+    p.init_points_pos(1.0, N)
+    # Cell生成
+    # c_vel = ti.Vector.field(3, dtype=ti.f32, shape=())
+    # c_mass = ti.field(dtype=ti.f32, shape=())
 
     while window.running:
         # キーボードによる移動に対応
@@ -79,7 +101,7 @@ def main():
         scene.ambient_light((0.8, 0.8, 0.8))
         scene.point_light(pos=(0.5, 1.5, 1.5), color=(1, 1, 1))
 
-        scene.particles(particles_pos, color=(0.68, 0.26, 0.19), radius=0.02)
+        scene.particles(p.pos, color=(0.68, 0.26, 0.19), radius=0.02)
         canvas.scene(scene)
         window.show()
 
