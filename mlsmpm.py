@@ -29,11 +29,31 @@ class StaticBall:
 
 
 def main():
-    # 質点の初期化。XYZ方向に伸ばしている
     @ti.kernel
-    def init_points_pos(points: ti.template()):
-        for i in range(points.shape[0]):
-            points[i] = [i * 0.1 for j in ti.static(range(3))]
+    def init_points_pos(points: ti.template(), width: ti.f32, n: ti.i32):
+        """
+        配列の初期化
+        @param points: 配列
+        @param width: グリッド配置の幅の長さ
+        @param n: グリッドの分割数
+        """
+        quad_size = width / n
+        half_width = width / 2
+        # 結果が変化するように位置を10%のランダムを与える
+        random_offset = (
+            ti.Vector(
+                [ti.random() * width - half_width, ti.random() * width - half_width]
+            )
+            * 0.1
+        )
+
+        for i in range(n):
+            for j in range(n):
+                points[i * n + j] = [
+                    i * quad_size - half_width + random_offset[0],
+                    0.6,
+                    j * quad_size - half_width + random_offset[1],
+                ]
 
     window = ti.ui.Window("Taichi Particle view", (1024, 1024), vsync=True)
 
@@ -47,9 +67,9 @@ def main():
     camera.lookat(0.0, 0.0, 0)
 
     # パーティクル作成
-    N = 50
-    particles_pos = ti.Vector.field(3, dtype=ti.f32, shape=N)
-    init_points_pos(particles_pos)
+    N = 16
+    particles_pos = ti.Vector.field(3, dtype=ti.f32, shape=pow(N, 2))
+    init_points_pos(particles_pos, 1.0, N)
 
     while window.running:
         # キーボードによる移動に対応
